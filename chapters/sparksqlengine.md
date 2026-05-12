@@ -3537,3 +3537,1169 @@ Because shuffle read determines downstream execution cost and network dependency
 ## 11 Key Mental Model
 
 SQL Metrics in Spark are the runtime telemetry layer of query execution. They provide visibility into how a query actually behaved across distributed systems, enabling engineers to diagnose bottlenecks, validate optimization effectiveness, and identify production inefficiencies in Spark SQL workloads.
+
+---
+
+# 4.12 SQL Performance Tuning in Spark
+
+---
+
+## 1 What SQL Performance Tuning Actually Means
+
+SQL Performance Tuning in Spark is the process of **improving query execution efficiency by controlling data movement, execution strategy, memory usage, and Spark SQL optimizations**.
+
+At Staff level, tuning is not about single fixes. It is about:
+- understanding execution plan behavior
+- identifying bottlenecks in distributed execution
+- aligning Catalyst + AQE + runtime behavior with workload characteristics
+
+> Performance tuning is essentially “making Spark choose and execute the right physical plan under real cluster constraints”.
+
+---
+
+## 2 Where Performance Tuning Applies in Spark
+
+Tuning can happen at multiple layers:
+
+- SQL query design layer
+- Catalyst optimization layer
+- Physical execution layer
+- Cluster configuration layer
+- Storage layer (file format, partitioning)
+
+A Senior engineer always tunes across layers, not just query level.
+
+---
+
+## 3 Core Levers of Spark SQL Performance Tuning
+
+---
+
+### 1 Data Reduction Techniques
+
+Goal: reduce data early in the pipeline
+
+Techniques:
+- predicate pushdown
+- column pruning
+- early filtering
+- avoiding SELECT *
+
+Impact:
+- reduces scan I/O
+- reduces shuffle size
+- improves execution speed
+
+---
+
+### 2 Join Optimization
+
+Joins are the most expensive operations in Spark.
+
+Key strategies:
+- broadcast join for small tables
+- sort merge join for large tables
+- avoid cross joins
+- ensure join key distribution is balanced
+
+Critical insight:
+> Join strategy directly controls shuffle cost.
+
+---
+
+### 3 Partitioning Strategy
+
+Partitioning determines parallelism and shuffle behavior.
+
+Key techniques:
+- repartition based on join keys
+- avoid too many small partitions
+- avoid too few large partitions
+
+Tradeoff:
+- more partitions = more parallelism but higher overhead
+- fewer partitions = less overhead but risk of skew
+
+---
+
+### 4 Shuffle Optimization
+
+Shuffle is the biggest performance bottleneck.
+
+Optimization methods:
+- reduce shuffle stages
+- enable AQE
+- tune spark.sql.shuffle.partitions
+- avoid unnecessary wide transformations
+
+---
+
+### 5 Caching Strategy
+
+Caching avoids recomputation.
+
+Types:
+- MEMORY_ONLY
+- MEMORY_AND_DISK
+
+Use cases:
+- reused datasets in iterative queries
+- intermediate results in pipelines
+
+Risk:
+- excessive caching causes memory pressure
+
+---
+
+### 6 UDF Avoidance
+
+UDFs break Spark optimization because:
+- they are black boxes for Catalyst
+- prevent predicate pushdown
+- disable code generation optimization
+
+Preferred:
+- built-in Spark SQL functions
+
+---
+
+## 4 Execution Plan Driven Tuning
+
+A core Staff-level principle:
+
+> You do not tune Spark blindly. You tune based on explain plan + Spark UI.
+
+Key steps:
+1. analyze logical plan
+2. inspect optimized plan
+3. validate physical plan
+4. correlate with Spark UI metrics
+
+---
+
+## 5 Production Scenarios
+
+---
+
+### Scenario 1 Query Slow Due to Full Table Scan
+
+Problem:
+Query processes entire dataset even with filters.
+
+Root cause:
+- missing predicate pushdown
+- non deterministic UDF in filter
+- unsupported file format
+
+Fix:
+- use native Spark functions
+- ensure Parquet or Delta format
+- validate pushed filters in explain plan
+
+---
+
+### Scenario 2 Join Taking Too Long
+
+Problem:
+Large join takes hours.
+
+Root cause:
+- wrong join strategy (SortMerge instead of Broadcast)
+- skewed keys
+- missing statistics
+
+Fix:
+- enable AQE
+- run ANALYZE TABLE
+- use broadcast hint if safe
+
+---
+
+### Scenario 3 High Shuffle Spill
+
+Problem:
+Tasks spill heavily to disk.
+
+Root cause:
+- insufficient executor memory
+- large aggregation groups
+- poor partition sizing
+
+Fix:
+- increase executor memory
+- tune shuffle partitions
+- reduce data before aggregation
+
+---
+
+## 6 Debugging Methodology
+
+Senior engineers follow structured debugging:
+
+Step 1 Check explain plan
+- is filter applied early
+- is join strategy optimal
+
+Step 2 Check Spark UI
+- shuffle read/write
+- task duration skew
+- executor memory usage
+
+Step 3 Identify bottleneck type
+- CPU bound
+- IO bound
+- memory bound
+- shuffle bound
+
+Step 4 Apply targeted fix
+
+---
+
+## 7 Tradeoffs in Performance Tuning
+
+---
+
+### 1 Optimization vs Maintainability
+Highly tuned queries can become harder to maintain.
+
+---
+
+### 2 Memory vs Disk Tradeoff
+Caching improves speed but increases memory usage.
+
+---
+
+### 3 Parallelism vs Overhead
+More partitions increase throughput but add scheduling overhead.
+
+---
+
+### 4 Pushdown vs Flexibility
+Aggressive pushdown improves performance but may restrict query flexibility.
+
+---
+
+## 8 Interview Questions
+
+---
+
+### Q1 What is Spark SQL Performance Tuning
+
+It is the process of improving query performance by optimizing data movement, execution strategy, memory usage, and Spark SQL execution plans.
+
+---
+
+### Q2 What is the most expensive operation in Spark
+
+Shuffle is generally the most expensive due to network and disk I/O.
+
+---
+
+### Q3 Why are UDFs bad for performance
+
+Because they prevent Catalyst optimizations like predicate pushdown and code generation.
+
+---
+
+### Q4 How do you decide join strategy
+
+Based on data size, statistics, and whether broadcast or shuffle is cheaper.
+
+---
+
+### Q5 What is the first step in performance tuning
+
+Analyzing the explain plan and Spark UI metrics.
+
+---
+
+## 9 Follow Up Interview Questions
+
+---
+
+### Q How do you tune a slow Spark query
+
+By analyzing execution plan, reducing shuffle, improving join strategy, and optimizing partitioning.
+
+---
+
+### Q What is the biggest mistake in tuning Spark jobs
+
+Tuning blindly without checking execution plan and Spark UI.
+
+---
+
+### Q How do you detect bottleneck type
+
+Using Spark UI metrics like shuffle read, GC time, and task duration distribution.
+
+---
+
+## 10 Key Mental Model
+
+Spark SQL Performance Tuning is a systematic approach to optimizing distributed query execution by controlling data movement, execution strategy, and resource utilization while leveraging Catalyst optimization, AQE runtime adaptation, and Spark UI metrics to ensure efficient large scale processing.
+
+---
+
+# 4.13 ANSI SQL Support in Spark SQL
+
+---
+
+## 1 What ANSI SQL Support Actually Means
+
+ANSI SQL support in Spark refers to Spark’s ability to **adhere to standard SQL semantics defined by the ANSI SQL specification**, instead of using Spark’s legacy or relaxed SQL behavior.
+
+At Staff level, this is important because:
+> It determines correctness, portability, and consistency of SQL behavior across systems.
+
+---
+
+## 2 Why ANSI SQL Mode Exists in Spark
+
+Spark originally had relaxed SQL semantics:
+- implicit type casting
+- lenient null handling
+- forgiving comparisons
+
+This caused:
+- inconsistent query results across systems
+- migration issues from traditional databases
+- subtle production bugs
+
+ANSI mode was introduced to enforce strict correctness.
+
+---
+
+## 3 What Changes in ANSI Mode
+
+When ANSI mode is enabled:
+
+spark.sql.ansi.enabled = true
+
+Spark enforces strict behavior in:
+
+---
+
+### 1 Type Casting Rules
+
+- invalid casts throw errors instead of returning null
+- e.g. string to int fails if invalid
+
+Example:
+'abc' cast to int → error (ANSI mode)
+
+Without ANSI:
+→ returns null
+
+---
+
+### 2 Arithmetic Overflow Handling
+
+- integer overflow throws exception
+- no silent wraparound
+
+Example:
+INT_MAX + 1 → error in ANSI mode
+
+---
+
+### 3 Null Semantics
+
+- strict evaluation of null expressions
+- comparisons follow ANSI rules
+
+Example:
+NULL = NULL → unknown (not true)
+
+---
+
+### 4 Division Behavior
+
+- division by zero throws error
+- instead of returning null or infinity
+
+---
+
+## 4 How Spark Implements ANSI Compliance
+
+Spark enforces ANSI behavior through:
+
+- runtime checks in expression evaluation
+- stricter Catalyst rules
+- validation during analysis phase
+- exception throwing in execution layer
+
+Important:
+ANSI behavior is enforced at runtime, not only compile time.
+
+---
+
+## 5 Impact on Catalyst Optimization
+
+ANSI mode affects Catalyst in subtle ways:
+
+- disables certain unsafe optimizations
+- prevents implicit casting simplifications
+- enforces strict expression evaluation rules
+
+This can slightly reduce optimization flexibility.
+
+---
+
+## 6 Production Scenarios
+
+---
+
+### Scenario 1 Pipeline Fails After Enabling ANSI Mode
+
+Problem:
+Previously working jobs start failing.
+
+Root cause:
+- hidden invalid casts
+- implicit null conversions previously ignored
+
+Fix:
+- identify failing expressions in logs
+- explicitly cast data types
+- clean input data before processing
+
+---
+
+### Scenario 2 Silent Data Corruption in Non-ANSI Mode
+
+Problem:
+Incorrect results in aggregation pipelines.
+
+Root cause:
+- invalid data silently converted to null
+- arithmetic overflow ignored
+
+Fix:
+- enable ANSI mode
+- validate input data schema
+- enforce strict type checks
+
+---
+
+### Scenario 3 Migration from Hive to Spark SQL
+
+Problem:
+Query results differ between systems.
+
+Root cause:
+- Hive uses lenient SQL semantics
+- Spark ANSI mode enforces strict behavior
+
+Fix:
+- align SQL modes
+- adjust casting logic
+- test edge cases explicitly
+
+---
+
+## 7 Debugging ANSI Issues
+
+Engineers typically check:
+
+- exception stack traces for cast failures
+- execution logs for overflow errors
+- query differences between ANSI and non-ANSI mode
+- data quality issues upstream
+
+Key insight:
+> ANSI errors usually expose hidden data quality problems.
+
+---
+
+## 8 Tradeoffs of ANSI Mode
+
+---
+
+### 1 Correctness vs Flexibility
+ANSI ensures correctness but reduces tolerance for bad data.
+
+---
+
+### 2 Strictness vs Compatibility
+Some legacy pipelines break under ANSI mode.
+
+---
+
+### 3 Debug Clarity vs Execution Stability
+Errors become visible early but can cause pipeline failures.
+
+---
+
+## 9 Interview Questions
+
+---
+
+### Q1 What is ANSI SQL support in Spark
+
+ANSI SQL support enforces strict SQL standards for type casting, arithmetic operations, and null handling in Spark SQL.
+
+---
+
+### Q2 What changes when ANSI mode is enabled
+
+It enforces strict type casting, overflow checks, and null semantics based on ANSI SQL standards.
+
+---
+
+### Q3 Why does ANSI mode cause job failures
+
+Because it exposes invalid casts, overflow conditions, and data quality issues that were previously ignored.
+
+---
+
+### Q4 How does Spark enforce ANSI behavior
+
+Through runtime checks in Catalyst and execution engine during expression evaluation.
+
+---
+
+### Q5 Is ANSI mode always recommended
+
+No. It is recommended for production correctness but may break legacy pipelines.
+
+---
+
+## 10 Follow Up Interview Questions
+
+---
+
+### Q How do you debug ANSI-related failures
+
+By analyzing exception traces, identifying invalid casts, and tracing upstream data quality issues.
+
+---
+
+### Q How does ANSI mode affect performance
+
+Slight overhead due to strict checks and reduced optimization flexibility.
+
+---
+
+### Q Can ANSI mode change query results
+
+Yes, especially in cases involving null handling, casting, and arithmetic overflow.
+
+---
+
+## 11 Key Mental Model
+
+ANSI SQL support in Spark enforces strict relational database semantics on distributed data processing, ensuring correctness and predictability at the cost of reduced leniency and potential pipeline breakages. It is essential for production-grade systems where data correctness is more important than backward compatibility.
+
+----
+
+# 4.14 SQL Extensions in Spark SQL
+
+---
+
+## 1 What SQL Extensions Mean in Spark
+
+SQL Extensions in Spark refer to **non-standard SQL capabilities and Spark-specific enhancements added on top of ANSI SQL**.
+
+They allow Spark to go beyond traditional relational databases and support:
+- distributed processing semantics
+- semi-structured data
+- advanced analytics
+- cloud-native optimizations
+
+At Staff level:
+> SQL extensions are what transform Spark from a SQL engine into a distributed data processing engine.
+
+---
+
+## 2 Why Spark Needs SQL Extensions
+
+ANSI SQL alone is insufficient for modern data systems because it does not handle:
+- nested data structures (JSON, structs, arrays)
+- distributed execution complexity
+- streaming data
+- large-scale file-based storage systems
+
+SQL extensions solve these gaps.
+
+---
+
+## 3 Major Categories of SQL Extensions
+
+---
+
+### 1 Semi-Structured Data Extensions
+
+Spark supports complex types:
+- ARRAY
+- MAP
+- STRUCT
+
+Example:
+SELECT user.address.city FROM table
+
+This is not standard ANSI SQL.
+
+---
+
+### 2 Higher Order Functions
+
+Used for array and map processing:
+
+- transform
+- filter
+- aggregate
+- exists
+
+Example:
+transform(array_col, x -> x + 1)
+
+These enable functional-style distributed processing inside SQL.
+
+---
+
+### 3 Window Function Extensions
+
+Spark extends SQL windowing with:
+- partitioned computation
+- ordered aggregations
+- running totals
+- ranking functions
+
+Example:
+ROW_NUMBER() OVER (PARTITION BY dept ORDER BY salary)
+
+---
+
+### 4 JSON and Semi-Structured Query Extensions
+
+Spark supports:
+- get_json_object
+- from_json
+- to_json
+
+These allow querying nested JSON without manual parsing.
+
+---
+
+### 5 File Format Extensions
+
+Spark SQL directly integrates with:
+- Parquet
+- ORC
+- Delta Lake formats
+
+This allows:
+- schema inference
+- column pruning at storage layer
+- predicate pushdown into files
+
+---
+
+### 6 Streaming SQL Extensions
+
+Spark extends SQL for streaming:
+- continuous processing
+- watermarking
+- event-time processing
+
+This is not part of standard SQL.
+
+---
+
+## 4 How Spark Implements SQL Extensions
+
+Spark uses Catalyst + Expression Engine:
+
+- SQL parser identifies extension syntax
+- Catalyst converts it into logical expressions
+- Physical plan maps it to distributed operators
+- Tungsten executes optimized binary logic
+
+---
+
+## 5 Impact on Query Execution
+
+SQL extensions often:
+- bypass traditional relational constraints
+- introduce additional execution complexity
+- require specialized optimization paths
+
+But they also:
+- reduce need for UDFs
+- improve optimization opportunities
+- enable vectorized execution
+
+---
+
+## 6 Production Scenarios
+
+---
+
+### Scenario 1 Complex JSON Query Performance Issue
+
+Problem:
+Query on nested JSON is slow.
+
+Root cause:
+- repeated JSON parsing
+- no schema inference
+- no column pruning on nested fields
+
+Fix:
+- use from_json with explicit schema
+- flatten nested structures
+- convert to columnar format like Parquet
+
+---
+
+### Scenario 2 Heavy Use of UDF Instead of SQL Extensions
+
+Problem:
+Pipeline is slow due to Python UDFs.
+
+Root cause:
+- lack of higher order function usage
+- Catalyst cannot optimize UDF
+
+Fix:
+- replace UDF with transform/filter higher order functions
+- use built-in Spark SQL functions
+
+---
+
+### Scenario 3 Window Query Performance Bottleneck
+
+Problem:
+Window function query is slow on large dataset.
+
+Root cause:
+- shuffle-heavy partitioning
+- incorrect ordering strategy
+- missing partition pruning
+
+Fix:
+- optimize partitionBy keys
+- reduce window frame size
+- enable AQE optimization
+
+---
+
+## 7 Debugging SQL Extensions
+
+Engineers inspect:
+
+- explain plan for expression expansion
+- Catalyst logical plan tree
+- Spark UI shuffle metrics
+- execution of higher order functions
+
+Key signals:
+- repeated expression evaluation → inefficiency
+- large shuffle in window operations → partition issue
+
+---
+
+## 8 Tradeoffs of SQL Extensions
+
+---
+
+### 1 Expressiveness vs Performance
+More expressive queries can increase execution complexity.
+
+---
+
+### 2 Abstraction vs Control
+SQL extensions hide distributed complexity but reduce fine-grained control.
+
+---
+
+### 3 Optimization vs Flexibility
+Some extensions are harder for Catalyst to optimize fully.
+
+---
+
+## 9 Interview Questions
+
+---
+
+### Q1 What are SQL Extensions in Spark
+
+SQL extensions are Spark-specific enhancements beyond ANSI SQL that enable distributed processing, semi-structured data handling, and advanced analytics.
+
+---
+
+### Q2 Why does Spark need SQL extensions
+
+Because ANSI SQL cannot handle distributed data processing, nested data structures, and streaming workloads efficiently.
+
+---
+
+### Q3 What are higher order functions in Spark SQL
+
+They are functions that operate on arrays or maps using functional programming style like transform and filter.
+
+---
+
+### Q4 Do SQL extensions affect performance
+
+Yes, depending on usage they can either improve performance by avoiding UDFs or introduce complexity if misused.
+
+---
+
+### Q5 Why are SQL extensions important in Spark
+
+They allow Spark to operate as both a SQL engine and a distributed data processing engine.
+
+---
+
+## 10 Follow Up Interview Questions
+
+---
+
+### Q Why are UDFs discouraged when SQL extensions exist
+
+Because SQL extensions are Catalyst optimized while UDFs are black boxes that break optimization.
+
+---
+
+### Q How do SQL extensions interact with Catalyst
+
+Catalyst translates them into logical and physical operators for optimization.
+
+---
+
+### Q Are SQL extensions portable across databases
+
+No, they are Spark-specific and not part of ANSI SQL standard.
+
+---
+
+## 11 Key Mental Model
+
+SQL extensions in Spark represent the bridge between traditional relational SQL and distributed data processing requirements. They extend SQL semantics to support nested data, functional transformations, and large-scale analytics while still leveraging Catalyst optimization and Tungsten execution for performance at scale.
+
+---
+
+# 4.15 SQL Troubleshooting in Spark
+
+---
+
+## 1 What SQL Troubleshooting Actually Means
+
+SQL troubleshooting in Spark is the structured process of **identifying, isolating, and fixing performance, correctness, or execution failures in Spark SQL workloads**.
+
+At Staff level, troubleshooting is not reactive debugging. It is:
+> systematic reasoning across Catalyst, physical plans, execution metrics, and cluster behavior to find root cause of query failure or slowdown.
+
+---
+
+## 2 Where SQL Issues Typically Occur
+
+Most production issues originate in one of these layers:
+
+- Query design layer (bad SQL logic)
+- Catalyst layer (bad logical/physical plan)
+- Execution layer (shuffle, memory, CPU)
+- Storage layer (file format, partitioning)
+- Cluster layer (resource contention)
+
+A Senior engineer must quickly classify which layer is responsible.
+
+---
+
+## 3 Step by Step Troubleshooting Framework
+
+---
+
+### Step 1 Understand the Symptom
+
+Common symptoms:
+- slow query
+- job failure
+- executor OOM
+- skewed execution
+- wrong results
+
+You must first classify:
+- performance issue vs correctness issue vs infrastructure issue
+
+---
+
+### Step 2 Check Explain Plan
+
+Use:
+- explain true
+- explain formatted
+
+Check:
+- predicate pushdown applied or not
+- join strategy selection
+- shuffle boundaries
+- scan behavior
+
+This tells you if problem is planning stage or execution stage.
+
+---
+
+### Step 3 Analyze Spark UI
+
+Key sections:
+- Jobs tab → overall execution
+- Stages tab → shuffle and task breakdown
+- Executors tab → memory and CPU usage
+- SQL tab → query-level insights
+
+Look for:
+- skewed tasks
+- long running stages
+- shuffle bottlenecks
+
+---
+
+### Step 4 Validate Data Characteristics
+
+Check:
+- data skew
+- partition size distribution
+- null-heavy columns
+- cardinality of join keys
+
+Many Spark issues are actually data problems.
+
+---
+
+### Step 5 Correlate Plan with Metrics
+
+Compare:
+- expected join strategy vs actual
+- expected filter pushdown vs actual
+- expected partitioning vs runtime behavior
+
+Mismatch usually indicates root cause.
+
+---
+
+## 4 Common SQL Failure Patterns
+
+---
+
+### 1 Missing Predicate Pushdown
+
+Symptom:
+Full table scan despite filter condition
+
+Root cause:
+- UDF in filter
+- non deterministic expression
+- unsupported format
+
+Fix:
+- use native Spark functions
+- ensure Parquet or Delta format
+- validate pushed filters in explain plan
+
+---
+
+### 2 Join Performance Degradation
+
+Symptom:
+Query becomes slow after join
+
+Root cause:
+- wrong join strategy (SortMerge instead of Broadcast)
+- missing statistics
+- skewed join keys
+
+Fix:
+- enable AQE
+- run ANALYZE TABLE
+- use broadcast hints if safe
+
+---
+
+### 3 Data Skew in Aggregation
+
+Symptom:
+One task takes significantly longer
+
+Root cause:
+- uneven key distribution
+- hotspot partition
+
+Fix:
+- salting technique
+- AQE skew handling
+- repartition by better keys
+
+---
+
+### 4 Executor Memory OOM
+
+Symptom:
+Tasks fail with OutOfMemoryError
+
+Root cause:
+- large shuffle partitions
+- insufficient memory allocation
+- high cardinality aggregation
+
+Fix:
+- increase executor memory
+- reduce shuffle partition size
+- optimize query logic
+
+---
+
+## 5 Production Debugging Scenarios
+
+---
+
+### Scenario 1 Query Works in Dev but Fails in Prod
+
+Root cause:
+- different data volume
+- outdated statistics
+- skew not present in dev dataset
+
+Fix:
+- validate production data distribution
+- run explain plan on production sample
+- enable AQE
+
+---
+
+### Scenario 2 Sudden Performance Regression
+
+Root cause:
+- data growth changed join strategy
+- statistics became outdated
+- partition imbalance increased
+
+Fix:
+- refresh statistics
+- re-evaluate physical plan
+- check Spark UI stage metrics
+
+---
+
+### Scenario 3 Intermittent Failures
+
+Root cause:
+- executor instability
+- speculative execution disabled
+- uneven resource allocation
+
+Fix:
+- enable speculative execution
+- increase executor stability
+- monitor cluster health
+
+---
+
+## 6 Spark UI Based Diagnosis Strategy
+
+---
+
+### Stage Level
+Look for:
+- shuffle read spikes
+- long task duration
+- failed tasks
+
+---
+
+### Task Level
+Look for:
+- skewed task execution time
+- GC time vs execution time
+- spill to disk
+
+---
+
+### Executor Level
+Look for:
+- memory saturation
+- CPU imbalance
+- frequent failures
+
+---
+
+## 7 Tradeoffs in Troubleshooting
+
+---
+
+### 1 Depth vs Time
+Deep investigation takes time but gives accurate root cause.
+
+---
+
+### 2 Fix Speed vs Stability
+Quick fixes may hide underlying data issues.
+
+---
+
+### 3 Query Fix vs Data Fix
+Sometimes SQL is fine, but data distribution is the real problem.
+
+---
+
+## 8 Interview Questions
+
+---
+
+### Q1 What is SQL troubleshooting in Spark
+
+It is the process of diagnosing and fixing performance, execution, or correctness issues in Spark SQL using explain plans, Spark UI, and execution metrics.
+
+---
+
+### Q2 What is your first step in debugging slow Spark query
+
+Analyze the explain plan and identify whether issue is in logical plan or physical execution.
+
+---
+
+### Q3 How do you detect data skew
+
+By observing uneven task durations and skewed shuffle partition sizes in Spark UI.
+
+---
+
+### Q4 What tools do you use for troubleshooting Spark SQL
+
+Explain plan, Spark UI, event logs, and execution metrics.
+
+---
+
+### Q5 What is most common root cause of Spark SQL issues
+
+Data skew and inefficient physical plan selection.
+
+---
+
+## 9 Follow Up Interview Questions
+
+---
+
+### Q Why is explain plan not enough for debugging
+
+Because it shows static plan, not runtime behavior like skew or executor issues.
+
+---
+
+### Q How do you differentiate between plan issue and cluster issue
+
+Plan issues show up in explain output, cluster issues show up in Spark UI metrics.
+
+---
+
+### Q What is hardest issue to debug in Spark SQL
+
+Data skew combined with incorrect join strategy.
+
+---
+
+## 10 Key Mental Model
+
+SQL troubleshooting in Spark is a systematic debugging process that combines static analysis of Catalyst execution plans with runtime observation from Spark UI and metrics. The goal is to identify whether the issue originates from query design, optimization logic, or distributed execution behavior, and then apply targeted fixes at the correct layer of the Spark execution pipeline.
