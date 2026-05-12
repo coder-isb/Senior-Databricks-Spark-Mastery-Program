@@ -387,3 +387,279 @@ Performance depends on
 - statistics accuracy
 - execution plan quality
 - runtime data distribution
+
+- -----
+
+# 4.2 SQL Parsing in Spark SQL Engine
+
+---
+
+## 1 What SQL Parsing Actually Means in Spark
+
+SQL parsing is the first stage where Spark starts interpreting a query string. At this point Spark has no understanding of tables, data, or execution. It only sees a raw text query.
+
+The purpose of parsing is to convert this text into a structured representation that Spark can reason about internally.
+
+This structured representation is called an Abstract Syntax Tree or AST.
+
+---
+
+## 2 Where Parsing Fits in Spark SQL Pipeline
+
+Before understanding parsing in isolation, it is important to place it in the full flow
+
+SQL string
+  Parsing into AST
+  Analysis using Catalyst Analyzer
+  Logical Plan creation
+  Optimization via Catalyst
+  Physical Plan selection
+  Execution via DAG and Tungsten
+
+Parsing is strictly a syntax level transformation step. It is not aware of schema or data.
+
+---
+
+## 3 How Spark Performs Parsing Internally
+
+When a query is submitted, Spark uses a SQL parser module built on ANTLR grammar definitions.
+
+The parser performs two key operations
+
+Lexical analysis
+This breaks the query into tokens such as keywords, identifiers, operators, and literals
+
+Syntax analysis
+This arranges tokens into a structured tree based on SQL grammar rules
+
+---
+
+## 4 Example of SQL Parsing Transformation
+
+Input query
+
+SELECT name FROM users WHERE age > 30
+
+After parsing Spark generates an AST like structure
+
+Select
+  Project name
+  From users
+  Filter
+    GreaterThan age 30
+
+At this stage
+- Spark does not know if users table exists
+- Spark does not know if age column exists
+- Spark does not know data types
+- Spark does not optimize anything
+
+It only understands structure and intent
+
+---
+
+## 5 Key Properties of AST in Spark
+
+The Abstract Syntax Tree in Spark has the following properties
+
+- It is immutable once created
+- It is language independent internal representation
+- It is purely syntactic, not semantic
+- It is used as input for Catalyst Analyzer
+
+AST is not executed and never touches data
+
+---
+
+## 6 Why Parsing Layer Exists
+
+Parsing exists because Spark must separate human readable SQL from internal execution logic
+
+This separation allows
+
+- multiple APIs to reuse same engine (SQL, DataFrame, Dataset)
+- consistent interpretation of queries
+- safe transformation into optimized plans
+
+Without parsing Spark would have to interpret raw strings at runtime which is not scalable
+
+---
+
+## 7 Failure Cases in Parsing Stage
+
+Parsing failures occur before any optimization or execution
+
+Common failures include
+
+Syntax errors
+Example missing keyword or invalid SQL structure
+
+SELECT FROM users
+
+This fails because column selection is missing
+
+Malformed expressions
+Incorrect operators or unbalanced brackets
+
+SELECT name FROM users WHERE age >>
+
+In such cases Spark throws parse exception before reaching Catalyst
+
+---
+
+## 8 Parsing vs Analysis Difference
+
+A critical interview concept
+
+Parsing only checks syntax
+Analysis checks semantics
+
+Parsing result
+Structure is valid SQL grammar
+
+Analysis result
+Tables and columns are validated against metadata
+
+Example
+
+SELECT abc FROM unknown_table
+
+Parsing passes
+Analysis fails
+
+This distinction is very important in production debugging
+
+---
+
+## 9 Spark SQL Parser Internals
+
+Internally Spark uses
+
+- ANTLR generated SQL grammar
+- Catalyst parser wrapper
+- Logical plan builder hooks
+
+The parser converts SQL into a Tree structure which later becomes a Logical Plan through Catalyst rules
+
+---
+
+## 10 Real Production Behavior of Parsing
+
+In production systems parsing is very fast and rarely a bottleneck
+
+However parsing failures often appear due to
+
+- dynamic SQL generation bugs
+- incorrect column names from upstream systems
+- malformed queries in ETL pipelines
+
+Parsing errors are usually caught early in job submission stage before any cluster resources are consumed
+
+---
+
+## 11 Debugging Parsing Issues
+
+When a query fails at parsing stage, debugging is straightforward compared to later stages
+
+Steps include
+
+- validate raw SQL string
+- check syntax correctness
+- ensure reserved keyword usage is correct
+- verify string escaping in dynamic queries
+
+Spark logs will show parse exception without job execution attempt
+
+---
+
+## 12 Production Scenario Deep Dive
+
+Scenario
+
+A production ETL job suddenly starts failing with SQL parse errors after upstream changes
+
+Root cause possibilities
+
+- schema column renamed upstream but query not updated
+- dynamically generated SQL introduced syntax bug
+- templated query substitution injected invalid characters
+
+Fix approach
+
+- log final rendered SQL before execution
+- validate query generation layer separately
+- add pre execution query linting step
+
+Prevention
+
+- enforce SQL validation in CI pipelines
+- maintain schema contract between upstream and downstream systems
+- avoid string concatenation based SQL generation
+
+---
+
+## 13 Interview Question Set
+
+---
+
+### Q1 What happens during SQL parsing in Spark
+
+SQL parsing converts a raw SQL string into an Abstract Syntax Tree using lexical and syntactic analysis. It validates grammar but does not validate schema or execute data operations.
+
+---
+
+### Q2 What is the difference between parsing and analysis in Spark
+
+Parsing validates SQL syntax and builds AST. Analysis resolves metadata like table names, column names, and data types using Spark catalog.
+
+---
+
+### Q3 Does parsing access data or schema
+
+No. Parsing is purely syntactic and does not access any metadata or data.
+
+---
+
+### Q4 Why is parsing important in Spark architecture
+
+Because it creates a structured representation of SQL that can be optimized and executed across multiple engines in a consistent way.
+
+---
+
+### Q5 What happens if parsing fails
+
+Spark throws a parse exception and stops execution before any Catalyst optimization or execution begins.
+
+---
+
+## 14 Follow Up Interview Questions
+
+---
+
+### Q Why does Spark separate parsing from analysis
+
+Because parsing is language grammar validation while analysis requires metadata access. Separating them improves modularity and performance.
+
+---
+
+### Q What is AST in Spark SQL
+
+AST is a tree representation of SQL query structure created during parsing before semantic resolution.
+
+---
+
+### Q How would you debug a parsing failure in production
+
+By inspecting raw SQL string, checking dynamically generated query templates, and validating syntax before submission.
+
+---
+
+### Q Can parsing affect query performance
+
+Not directly. Parsing is fast and only affects startup time, not execution performance.
+
+---
+
+## 15 Key Mental Model
+
+SQL parsing in Spark is the process of converting a raw SQL string into a structured Abstract Syntax Tree using grammar rules. This step is purely syntactic and acts as the foundation for Catalyst analysis and optimization layers. It does not interact with data or schema but ensures that the query structure is valid before deeper semantic processing begins.
