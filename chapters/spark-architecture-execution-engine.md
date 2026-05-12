@@ -2851,3 +2851,726 @@ distributed infrastructure units providing CPU, memory, disk, and network resour
 Executors execute computation.
 
 Worker Nodes provide the infrastructure enabling that computation.
+
+---
+# 1.6 SparkSession (Unified Entry Point into Spark)
+
+# What is SparkSession
+
+SparkSession is the unified entry point used to interact with Spark functionality.
+
+At beginner level, people usually define it as:
+
+"Main object used to interact with Spark."
+
+That definition is incomplete for deep interviews.
+
+The correct Staff-level mental model is:
+
+SparkSession is a high-level orchestration interface responsible for initializing and coordinating access to Spark execution engine, SQL engine, metadata catalog, runtime configuration system, and session state.
+
+It acts as the gateway into the Spark ecosystem.
+
+---
+
+# Why SparkSession Exists
+
+Before Spark 2.0, Spark APIs were fragmented.
+
+Developers had to create separate contexts:
+
+- SparkContext
+- SQLContext
+- HiveContext
+- StreamingContext
+
+This created multiple problems:
+
+- API complexity
+- inconsistent configuration handling
+- fragmented execution models
+- difficult session management
+
+SparkSession unified all these APIs into one abstraction.
+
+---
+
+# What SparkSession Internally Contains
+
+SparkSession internally manages:
+
+- SparkContext
+- SQL engine
+- SessionState
+- Metadata catalog
+- Runtime configuration
+- SQL parser
+- Catalyst optimizer integration
+
+SparkSession is NOT just a configuration object.
+
+It is the orchestration layer connecting user APIs to Spark internals.
+
+---
+
+# SparkSession Architecture
+
+High-level architecture:
+
+SparkSession
+|
+|-- SparkContext
+|-- SQL Engine
+|-- Catalog
+|-- Session State
+|-- Runtime Configuration
+|-- DataFrame APIs
+|-- SQL APIs
+
+---
+
+# Relationship Between SparkSession and SparkContext
+
+This is one of the most common interview questions.
+
+---
+
+# SparkContext
+
+Responsible for:
+
+- cluster communication
+- executor coordination
+- low-level execution control
+
+Works primarily at:
+- RDD execution layer
+
+---
+
+# SparkSession
+
+Responsible for:
+
+- DataFrame APIs
+- SQL APIs
+- catalog interaction
+- session management
+- structured processing
+
+Works primarily at:
+- structured data abstraction layer
+
+---
+
+# Important Interview Insight
+
+SparkSession internally contains SparkContext.
+
+You can access it using:
+
+```python
+spark.sparkContext
+```
+
+---
+
+# Why SparkSession Became Important
+
+Modern Spark workloads are dominated by:
+
+- SQL
+- DataFrames
+- structured ETL pipelines
+- analytics workloads
+
+SparkSession provides:
+
+- unified execution interface
+- SQL integration
+- Catalyst optimization support
+- simplified developer experience
+
+---
+
+# SparkSession Creation
+
+Example:
+
+```python
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("ETL Pipeline") \
+    .config("spark.sql.shuffle.partitions", "200") \
+    .getOrCreate()
+```
+
+---
+
+# What Happens Internally During SparkSession Creation
+
+This is extremely important.
+
+---
+
+# Step 1 — Builder Pattern Initializes Session
+
+SparkSession builder collects:
+
+- application name
+- runtime configuration
+- cluster configuration
+- session parameters
+
+---
+
+# Step 2 — SparkContext Initialization
+
+If SparkContext does not exist:
+
+Spark initializes:
+
+- Driver communication layer
+- scheduler backend
+- cluster manager connection
+- executor communication channels
+
+---
+
+# Step 3 — SQL Engine Initialization
+
+Spark initializes:
+
+- Catalyst optimizer
+- SQL parser
+- analyzer
+- logical planner
+- physical planner
+
+---
+
+# Step 4 — Catalog Initialization
+
+Spark loads:
+
+- databases
+- tables
+- temporary views
+- external catalog metadata
+
+---
+
+# Step 5 — Session State Creation
+
+Spark creates session-specific state:
+
+- runtime configs
+- temp views
+- SQL variables
+- execution parameters
+
+---
+
+# Why SparkSession is Session-Based
+
+Each SparkSession maintains isolated:
+
+- configurations
+- temporary views
+- SQL runtime state
+- session variables
+
+This enables:
+
+- notebook isolation
+- multi-user environments
+- concurrent workloads
+
+---
+
+# SparkSession and DataFrames
+
+DataFrames cannot exist independently.
+
+Every DataFrame is associated with a SparkSession.
+
+SparkSession provides:
+
+- execution engine
+- schema management
+- optimization framework
+- SQL integration
+
+---
+
+# SparkSession and Catalyst Optimizer
+
+SparkSession routes DataFrame operations into Catalyst optimizer.
+
+Example:
+
+```python
+df.filter(col("age") > 30)
+```
+
+Internally:
+
+- logical plan created
+- optimized by Catalyst
+- converted to physical plan
+- executed by Spark engine
+
+---
+
+# SparkSession and SQL Execution
+
+SparkSession enables SQL execution.
+
+Example:
+
+```python
+spark.sql("SELECT * FROM users")
+```
+
+Internally SQL query goes through:
+
+1. SQL Parser
+2. Analyzer
+3. Optimizer
+4. Physical Planner
+5. Execution Engine
+
+---
+
+# SparkSession and Metadata Catalog
+
+SparkSession manages metadata catalog.
+
+Catalog stores:
+
+- databases
+- tables
+- views
+- functions
+
+Can integrate with:
+
+- Hive Metastore
+- Unity Catalog
+- external metadata systems
+
+---
+
+# SparkSession and Temporary Views
+
+Example:
+
+```python
+df.createOrReplaceTempView("users")
+```
+
+Temporary views exist only inside current session unless global temp views are used.
+
+This is important in notebook environments.
+
+---
+
+# SparkSession Configuration System
+
+SparkSession manages runtime configurations.
+
+Example:
+
+```python
+spark.conf.set("spark.sql.shuffle.partitions", 500)
+```
+
+Configurations affect:
+
+- execution behavior
+- optimization strategy
+- shuffle parallelism
+- adaptive query execution
+
+---
+
+# Session-Level vs Cluster-Level Configuration
+
+# Session-Level Configuration
+
+Applies only to current session.
+
+Examples:
+
+- SQL settings
+- temporary runtime overrides
+
+---
+
+# Cluster-Level Configuration
+
+Applies globally across cluster.
+
+Examples:
+
+- executor memory
+- executor cores
+- dynamic allocation settings
+
+---
+
+# SparkSession and Lazy Evaluation
+
+SparkSession helps build execution plans but execution remains lazy.
+
+Transformations only build logical plans.
+
+Execution starts only after action triggered.
+
+Example:
+
+```python
+df.filter(col("age") > 30)
+```
+
+No execution yet.
+
+Execution begins after:
+
+```python
+df.count()
+```
+
+---
+
+# SparkSession and Multi-Tenancy
+
+In enterprise systems multiple users share same cluster.
+
+SparkSession provides isolation for:
+
+- temporary views
+- runtime configurations
+- SQL execution context
+
+Without session isolation:
+- workloads would interfere with each other
+
+---
+
+# SparkSession in Databricks
+
+In Databricks SparkSession is automatically created.
+
+Usually available as:
+
+```python
+spark
+```
+
+Databricks manages:
+
+- session lifecycle
+- notebook isolation
+- cluster integration
+
+---
+
+# SparkSession and Unity Catalog
+
+Modern Databricks architectures integrate SparkSession with Unity Catalog.
+
+Benefits include:
+
+- centralized governance
+- access control
+- metadata management
+- lineage tracking
+
+---
+
+# What Happens If SparkSession Stops
+
+Example:
+
+```python
+spark.stop()
+```
+
+Consequences:
+
+- SparkContext shuts down
+- executors terminate
+- cluster resources released
+- session metadata removed
+
+All associated DataFrames become invalid.
+
+---
+
+# Can Multiple SparkSessions Exist
+
+Yes.
+
+Multiple SparkSessions may exist within same application.
+
+However:
+
+- SparkContext may still be shared
+- session state remains isolated
+
+This is important for:
+
+- notebook environments
+- multi-user workloads
+
+---
+
+# Common SparkSession Misconceptions
+
+# Misconception 1
+
+SparkSession stores data.
+
+Incorrect.
+
+Data remains:
+
+- distributed across Executors
+- stored in external storage systems
+
+SparkSession stores:
+- metadata
+- configuration
+- execution context
+
+---
+
+# Misconception 2
+
+SparkSession performs computation.
+
+Incorrect.
+
+Executors perform actual computation.
+
+SparkSession orchestrates interaction with execution engine.
+
+---
+
+# Misconception 3
+
+SparkSession replaces Driver.
+
+Incorrect.
+
+SparkSession exists INSIDE Driver process.
+
+It is not a distributed component.
+
+---
+
+# Spark UI and SparkSession
+
+SparkSession itself is not directly visible in Spark UI.
+
+However:
+
+- DataFrame jobs triggered through SparkSession appear
+- SQL execution plans appear
+- query execution metrics appear
+
+Spark UI indirectly reflects SparkSession activity.
+
+---
+
+# Real Production Scenario
+
+# Scenario: Incorrect Session Configuration Causes Shuffle Explosion
+
+An ETL notebook creates SparkSession with:
+
+```python
+spark.conf.set("spark.sql.shuffle.partitions", 5000)
+```
+
+Cluster contains only:
+
+- 20 CPU cores
+
+Consequences:
+
+- excessive tiny tasks
+- scheduling overhead
+- Driver pressure
+- inefficient execution
+
+Observed symptoms:
+
+- long scheduling delays
+- poor CPU utilization
+- high task management overhead
+
+Root cause:
+
+Shuffle partition count massively exceeded available cluster parallelism.
+
+Resolution:
+
+- align partition count with cluster size
+- use Adaptive Query Execution
+- optimize partition strategy
+
+---
+
+# Important Interview Questions
+
+---
+
+# Q1: Why was SparkSession introduced
+
+## Answer
+
+SparkSession unified previously fragmented APIs such as:
+
+- SparkContext
+- SQLContext
+- HiveContext
+
+This simplified Spark application development and unified structured processing workflows.
+
+---
+
+# Q2: What is relationship between SparkSession and SparkContext
+
+## Answer
+
+SparkSession is a higher-level abstraction built on top of SparkContext.
+
+SparkContext handles:
+
+- cluster communication
+- low-level execution
+
+SparkSession handles:
+
+- SQL
+- DataFrames
+- catalog management
+- session state
+
+---
+
+# Q3: Does SparkSession execute tasks
+
+## Answer
+
+No.
+
+SparkSession builds logical and physical plans.
+
+Executors execute distributed tasks.
+
+---
+
+# Q4: Can multiple SparkSessions exist
+
+## Answer
+
+Yes.
+
+Multiple SparkSessions may exist with isolated session state while sharing same SparkContext.
+
+---
+
+# Q5: Why are sessions important in Spark
+
+## Answer
+
+Sessions provide isolation for:
+
+- configurations
+- temp views
+- SQL runtime state
+
+This enables multi-user and notebook-based workloads.
+
+---
+
+# Q6: What happens internally when SparkSession is created
+
+## Answer
+
+Spark initializes:
+
+- SparkContext
+- SQL engine
+- Catalyst optimizer
+- metadata catalog
+- runtime configuration system
+- session state
+
+---
+
+# Q7: Is SparkSession distributed
+
+## Answer
+
+No.
+
+SparkSession exists inside Driver process.
+
+Executors remain distributed.
+
+---
+
+# Q8: Why does SparkSession matter for optimization
+
+## Answer
+
+SparkSession integrates DataFrame and SQL APIs with Catalyst optimizer enabling:
+
+- logical optimization
+- physical optimization
+- execution planning
+
+---
+
+# Q9: What happens if SparkSession stops
+
+## Answer
+
+Stopping SparkSession shuts down:
+
+- SparkContext
+- executors
+- cluster resources
+- session metadata
+
+Execution environment becomes unavailable.
+
+---
+
+# Q10: Why are DataFrames tightly coupled with SparkSession
+
+## Answer
+
+Because SparkSession provides:
+
+- schema management
+- optimization engine
+- execution planning
+- SQL integration
+
+Without SparkSession DataFrames cannot function.
+
+---
+
+# Key Mental Model
+
+SparkSession is:
+
+the unified orchestration interface connecting user APIs with Spark execution engine, SQL engine, catalog system, optimization framework, and runtime configuration layer.
+
+It simplifies Spark interaction while enabling optimized structured data processing at scale.
